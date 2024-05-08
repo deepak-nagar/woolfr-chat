@@ -1,0 +1,334 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>whatsapp chat app</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+
+        * {
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #f8f8f8;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        section.chat_section {
+            width: 800px;
+            max-width: 90%;
+            background: #fff;
+            box-shadow: 0 10px 15px -3px rgba(0 .0, .0, 0.1), 0 4px 6px -2px rgba(0, .0, .0, .0.05);
+        }
+
+        .brand {
+            padding: 20px;
+            background: #f1f1f1;
+            display: flex;
+            align-items: center;
+        }
+
+        .brand h1 {
+            text-transform: uppercase;
+            font-size: 20px;
+            color: #444;
+            margin-left: 10px;
+        }
+
+        .message_area {
+            height: 500px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding-top: 40px;
+        }
+
+        textarea {
+            width: 100%;
+            border: none;
+            padding: 20px;
+            font-size: 16px;
+            outline: none;
+            background: #f8f8f8;
+        }
+
+        .message {
+            padding: 20px;
+            border-radius: 4px;
+            margin-bottom: 40px;
+            max-width: 300px;
+            position: relative;
+        }
+
+        .incoming {
+            background: #a62929;
+            color: #fff
+        }
+
+        .outgoing {
+            background: #2b309a;
+            color: #787976;
+            margin-left: auto;
+        }
+
+        .message h4 {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            color: #333;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <section class="chat_section">
+        <div class="brand">
+            <h1>whatsapp</h1>
+        </div>
+        <div class="user_list">
+
+        </div>
+        <div class="message_area">
+
+        </div>
+        <div>
+            <textarea id="textarea" cols="30" rows="1" placeholder="write a message...."></textarea>
+        </div>
+
+    </section>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/client.js"></script>
+    <script>
+
+        'use strict';
+        const socket = io();
+        const textarea = document.querySelector('#textarea');
+        const messageArea = document.querySelector('.message_area');
+        const notificationBell = document.getElementById('notificationBell');
+        let unreadMessageCount = 0;
+        Notification.requestPermission();
+
+        const name = prompt('Please enter your name:') || 'Guest';
+        const room = prompt('Enter room number:') || 'default';
+        const sender_id = prompt('Enter your sender_id');
+        const receiver_id = prompt('Enter your receiver_id');
+
+        socket.emit('joinRoom', room);                                      //1
+        // console.log("sender/receiver/leaveRomm===",room,sender_id,receiver_id);
+        // socket.emit('leaveRoom',  room );                                   //2
+
+        console.log("sender_id/receiver_id", sender_id, receiver_id);
+        socket.emit('existschat', { sender_id, receiver_id });
+
+        textarea.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage(e.target.value);
+            }
+        });
+
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                notificationBell.style.color = '#128C7E';
+                unreadMessageCount = 0;
+                updateNotificationBell();
+            }
+        });
+
+        socket.on('message', (msg, room) => {
+            console.log("msg/room",msg,room);
+            msg.status = 'seen';
+            appendMessage(msg, 'incoming');
+            scrollToBottom();
+            socket.emit('messageSeen', { room, messageId: msg.messageId, status: msg.status });
+
+            if (document.hidden) {
+                unreadMessageCount += 1;
+                updateNotificationBell();
+                showNotification(`${msg.user}: ${msg.message}`);
+            }
+        });
+
+        socket.on("numberOfPeopleInRoom", (data) => {                       // 3
+            console.log("Data", data);
+            socket.emit('numberOfPersonInRoom', data)
+            if (data.numberOfPeopleInRoom > 1) {
+                console.log("nnnnnnnnn");
+            }
+        })
+
+        notificationBell.addEventListener('click', () => {
+            document.click();
+        });
+
+        textarea.addEventListener('input', () => {
+            socket.emit('typing', { name, room });
+        });
+
+        socket.on('load-chat', function (msg) {
+            console.log("msg/load-chat:", msg);
+            const chatMessages = msg.chat;
+            chatMessages.forEach(message => appendMessage(message, 'incoming'));
+            scrollToBottom();
+        });
+
+        socket.on('messageSeen', (data) => {
+            console.log("data/messageSeen", data);
+            let user = updateMessageStatus(data.messageId, data.status);
+        });
+
+        socket.on('typing', (data) => {
+            updateTypingStatus(data.name);
+        });
+
+        socket.on('stopTyping', () => {
+            updateTypingStatus();
+        });
+
+        function sendMessage(message) {
+            console.log('message111',message);
+            const msg = {
+                user: name,
+                message: message.trim(),
+                status: message.status,
+            };
+
+            console.log("---===>", msg.user, msg.message, msg.status)
+
+           
+       
+                                                            // yha per noofpeopleinroom ko dynamic krna hai
+            socket.emit('newchat', {                                //4
+                noofpeopleinroom:2,sender_id, receiver_id, msg: msg.message, user: msg.user, msg:
+                {
+                    chatId: room,
+                    msgType: '',
+                    fromUserId: '',
+                    toUserId: '',
+                    message: msg.message,
+                    imgUrl: '',
+                    videoImgUrl: '',
+                    videoUrl: '',
+                    audioUrl: '',
+                    stickerId: '',
+                    stickerImgUrl: '',
+                    area: '',
+                    country: '',
+                    city: '',
+                    lat: '',
+                    lng: '',
+                    createAt: 11111111111,
+                    removeAt: '',
+                    removeFromUserId: '0',
+                    removeToUserId: '',
+                    seenAt: '',
+                    seenFromUserId: '',
+                    seenToUserId: '',
+                    u_agent: '',
+                    ip_addr: '',
+                    location: {
+                        lat: 22.7520434,
+                        long: 75.8963129
+                    }
+                }
+            });
+        
+           
+
+
+            appendMessage(msg, 'outgoing');
+            textarea.value = '';
+            scrollToBottom();
+
+            socket.emit('privateMessage', { room, msg });
+            socket.emit('notifyRecipient', { recipientRoom: room, sender: name, message });
+        }
+        function appendMessage(msg, type) {
+            const mainDiv = document.createElement('div');
+            const className = type;
+            mainDiv.classList.add(className, 'message');
+
+            if (type === 'outgoing' || (type === 'incoming' && msg.user !== name)) {
+                const markup = `
+            <h4>${msg.user}</h4>
+            <p>${msg.message}</p>
+            <span class="status">${msg.status}</span>
+        `;
+                mainDiv.innerHTML = markup;
+                messageArea.appendChild(mainDiv);
+            }
+        }
+        function updateMessageStatus(messageId, status) {
+            console.log("status--", status);
+            const messages = document.querySelectorAll('.message');
+            messages.forEach((message) => {
+                const messageIdElement = message.querySelector('.status');
+                if (messageIdElement && messageIdElement.textContent === messageId) {
+                    messageIdElement.textContent = status;
+                    messageIdElement.classList.add(status);
+                }
+            });
+
+        }
+        function updateTypingStatus(name = '') {
+            const userList = document.querySelector('.user_list');
+            userList.innerHTML = name ? `<h3 class="typing">${name} is typing...</h3>` : '';
+        }
+        function scrollToBottom() {
+            messageArea.scrollTop = messageArea.scrollHeight;
+        }
+        function showNotification(message) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification('New Message', {
+                    body: message,
+                    icon: 'path-to-your-icon.png'
+                });
+
+                setTimeout(() => {
+                    notification.close();
+                }, 5000);
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        showNotification(message);
+                    }
+                });
+            }
+        }
+        function updateNotificationBell() {
+            if (unreadMessageCount > 0) {
+                notificationBell.innerHTML = `🔔 Notifications (${unreadMessageCount})`;
+                notificationBell.style.color = 'red'; // You can customize the color
+            } else {
+                notificationBell.innerHTML = `🔔 Notifications`;
+                notificationBell.style.color = '#128C7E';
+            }
+        }
+
+        // const lastMessageIsFromOtherUser = message.length && message[message.length - 1].sender !== currentUser.sender_id;
+        // if (lastMessageIsFromOtherUser) {
+            socket.emit("markMessagesAsSeen", { conversationId: selectedConversation._id, userId: selectedConversation.userId });
+        //     console.log("emit/markMessageAsSeen");
+        // }
+
+    </script>
+</body>
+</html>
+
+
+
+<!-- // ===========================  final end correct code 1/2/24 =================================================================== -->
+
