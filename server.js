@@ -6,6 +6,11 @@ var bodyParser = require("body-parser");
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
+const messageController = require("./Controller/messageController");
+const messageModel = require("./model/messagesModel");
+const path = require("path");
+const { count } = require("console");
+const { object } = require("joi");
 const fileupload = require("express-fileupload");
 app.use(fileupload());
 app.use(express.json());
@@ -42,12 +47,54 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("markMessagesAsSeen", async (data) => {
+    try {
+      console.log("seen-----", data); // jab user2 seen karega tb update hoga aur get api chalegi
+      let responseMarkMessageAsSeen = await messageModel.markMessagesAsSeen(
+        data
+      );
+      console.log("responseMarkMessageAsSeen", responseMarkMessageAsSeen);
+      let response = await messageModel.getDataById(data.id);
+      console.log("response/seen/server", response);
+      io.to(data.room).emit("messagesSeen", {
+        room: data.room,
+        sender_id: data.sender_id,
+        receiver_id: data.receiver_id,
+        response,
+      });
+    } catch (error) {
+      console.error("Error marking messages as seen:", error);
+    }
+  });
+
   socket.on("newchat", async (data) => {
     console.log("Received newchat data from client:", data);
     try {
+      let response = await messageModel.getDataWithRoom(data);
+      console.log("responSeenAt==", response);
+
+      //    if(!response == ''){
+
+      let getData = await messageModel.getDataById(response[0].id);
+      /** */
+      // if (getData[0].seenFromUserId == 1 && getData[0].seenToUserId == 1) {
+      //     getData[0].seenAt = '1'
+      // }
+
+      console.log("getdata[0].seenAt");
+      /** */
+      console.log("getData=====;;;");
+      let seenStatus = {
+        seenAt: getData[0].seenAt,
+        seenFromUserId: getData[0].seenFromUserId,
+        seenToUserId: getData[0].seenToUserId,
+      };
+      // console.log("seenStatus");
+      // const msg = { ...data.msg,"chatId":data.msg.chatId,"tableResponse":getData };
       const msg = {
         ...data.msg,
         chatId: data.msg.chatId,
+        seenStatus: seenStatus,
       };
       io.to(data.msg.chatId).emit("message", msg);
       console.log("Response from server:");
